@@ -59,10 +59,9 @@ from mendeley.auth import MendeleyAuthorizationCodeTokenRefresher
 from mendeley.exception import MendeleyApiException, MendeleyException
 from dotenv import load_dotenv
 
-
 # Constants
-REMARKABLE_FOLDER_IN_MENDELEY = "Remarkable"
-MENDELEY_FOLDER_IN_REMARKABLE = "Mendeley"
+REMARKABLE_FOLDER_IN_MENDELEY = "Debris"
+MENDELEY_FOLDER_IN_REMARKABLE = "Mendeley/Debris"
 
 
 # Loads env from either of these paths
@@ -200,14 +199,14 @@ class RmApi:
         return output
 
     def subfolders(self, parent=None):
-        out = self._run("ls") if not parent else self._run("ls", parent)
+        out = self._run("ls") if parent==None else self._run("ls", parent)
         # parse entries from rmapi output: this can be very flaky
         entries = out.decode('utf-8').split("\n")
         entries = [e.split("\t") for e in entries]
         return [e[1] for e in entries if e[0] == "[d]"]
 
     def files(self, parent=None):
-        out = self._run("ls") if not parent else self._run("ls", parent)
+        out = self._run("ls") if parent==None else self._run("ls", parent)
         # parse entries from rmapi output: this can be very flaky
         entries = out.decode('utf-8').split("\n")
         entries = [e.split("\t") for e in entries]
@@ -239,6 +238,15 @@ def to_filename(text, nospaces=False):
     text = text.replace(".", "")      # remove periods from title
     return text
 
+def folders_in_folders(parent=None):
+    """Recursively Build rmapi sub-folder tree in flattened list"""
+    folderpaths = []
+    for subfolder in RmApi().subfolders(parent):
+        subfolder_path = parent+'/'+subfolder if parent is not None else subfolder
+        folderpaths.append(subfolder_path)
+        if len(RmApi().subfolders(subfolder_path)) > 0:
+            folderpaths = folderpaths + folders_in_folders(subfolder_path)
+    return folderpaths
 
 # Main workflow
 def main():
@@ -249,8 +257,8 @@ def main():
     folders = Folder.get_folders(session)
     mfolder = next(filter(lambda f: f.name == REMARKABLE_FOLDER_IN_MENDELEY, folders), None)
     if not mfolder:
-        print("Cannot find '{}' folder in mendeley. \nHere's the flattened list of folders: {}", 
-            REMARKABLE_FOLDER_IN_MENDELEY, ", ".join([f.name for f in folders]))
+        print("Cannot find '{}' folder in mendeley. \nHere's the flattened list of folders: {}".format( 
+            REMARKABLE_FOLDER_IN_MENDELEY, ", ".join([f.name for f in folders])))
         raise Exception("Cannot find remarkable folder in mendeley!")
 
     # Get documents
@@ -260,7 +268,9 @@ def main():
 
     # # See what files are present in the tablet
     rmapi = RmApi()
-    topfolders = rmapi.subfolders()
+    # topfolders = rmapi.subfolders()
+    topfolders = folders_in_folders()
+
     if MENDELEY_FOLDER_IN_REMARKABLE not in topfolders:
         print("Cannot find '{}' root-level folder in remarkable.".format(MENDELEY_FOLDER_IN_REMARKABLE))
         print("Create it if it does not exist, I won't.\nCurrent top-level folders: ", ", ".join(topfolders))
@@ -339,8 +349,8 @@ def main():
     
     # Remove any stray zip files
     for item in os.listdir("."):    
-        if item.endswith(".zip"):   os.remove(item)
-
+        if item.endswith(".zip"):   
+            os.remove(item)
     print("Sync complete! Refresh your mendeley and remarkable apps.")
 
 
